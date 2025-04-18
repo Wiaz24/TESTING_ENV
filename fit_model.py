@@ -17,7 +17,9 @@ features.crop_data(start_date, end_date)
 
 train_features, test_features = features.split_by_date(pd.Timestamp(split_date))
 
-model.fit(train_features)
+model.fit(train_features, use_ifa=True)
 predictions = model.predict(test_features)
-print(predictions.metrics_df)
-model.save_model("trained_models")
+metrics = predictions.metrics_df
+print(metrics)
+metrics.to_csv("xgboost_metrics_ifa.csv")
+model.save_model("trained_models/xgboost_ifa")
