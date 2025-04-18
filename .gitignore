@@ -1,0 +1,7 @@
+**/*.csv
+**/*.json
+**/*.keras
+**/*.h5
+**/*.png
+__pycache__/
+.vscode/
