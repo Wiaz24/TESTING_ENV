@@ -73,7 +73,7 @@ class SingleLstmPredictionModel(IPredictionModel):
             X_ticker_df = features.get_features_for_ticker(ticker)
             # print(X_ticker_df.shape)
             X_ticker = X_ticker_df.values
-            y_ticker = features.get_targets_for_ticker(ticker).values
+            y_ticker = features.get_target_for_ticker(ticker)
 
             # Reshape the data to 3D array
             X_ticker = np.reshape(X_ticker, (X_ticker.shape[0], X_ticker.shape[1], 1))
@@ -97,7 +97,7 @@ class SingleLstmPredictionModel(IPredictionModel):
         predictions = PredictionsData(_index = features.df_index, _tickers = features.tickers)
         for ticker in self.tickers:
             X_ticker = features.get_features_for_ticker(ticker).values
-            y_ticker = features.get_targets_for_ticker(ticker).values
+            y_ticker = features.get_target_for_ticker(ticker).values
             # Reshape the data to 3D array
             X_ticker = np.reshape(X_ticker, (X_ticker.shape[0], X_ticker.shape[1], 1))
 

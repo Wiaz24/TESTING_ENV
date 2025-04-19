@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 @dataclass
 class PredictionsData:
@@ -77,6 +77,24 @@ class PredictionsData:
         return pd.Index([])
     
     @property
+    def predictions_df(self) -> pd.DataFrame:
+        """
+        Zwraca dataframe z predykcjami dla wszystkich tickerów. Kolumny są tickerami, a wiersze to daty.
+        """
+        if not self._dataframes:
+            return pd.DataFrame()
+        
+        pred_df = pd.DataFrame(index=self.index_df)
+        for ticker, df in self._dataframes.items():
+            if df.empty:
+                continue
+            pred_df[ticker] = df[self._predictions_col]
+        pred_df = pred_df.dropna(how='all')
+        pred_df.index.name = 'Date'
+        return pred_df
+            
+    
+    @property
     def dataframes(self) -> Dict[str, pd.DataFrame]:
         """
         Zwraca kopie dataframe'ów dla każdego tickera.
@@ -108,3 +126,27 @@ class PredictionsData:
             raise ValueError(f"Correct data index for ticker {ticker} does not match the dataframe index.")
         
         self._dataframes[ticker][self._correct_data_col] = correct_data
+
+    def plot_predictions(self, ticker: str, save_path: Optional[Path] = None) -> go.Figure:
+        """
+        Plot the predictions and correct data for a specific ticker using plotly
+        """
+        if ticker not in self.tickers:
+            raise ValueError(f"Ticker {ticker} not found in the list of tickers.")
+        
+        df = self._dataframes[ticker]
+        if df.empty:
+            raise ValueError(f"No data available for ticker {ticker}.")
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df.index, y=df[self._predictions_col], mode='lines', name='Predictions'))
+        fig.add_trace(go.Scatter(x=df.index, y=df[self._correct_data_col], mode='lines', name='Correct Data'))
+        fig.update_layout(title=f"Predictions vs Correct Data for {ticker}",
+                          xaxis_title="Date",
+                          yaxis_title="Value",
+                          legend_title="Legend")
+        if save_path:
+            fig.write_image(save_path)
+        return fig
+        
+        

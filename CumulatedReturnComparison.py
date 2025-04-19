@@ -1,8 +1,9 @@
 
 from prediction_models.SingleLstmPredictionModel import SingleLstmPredictionModel
 from prediction_models.XgboostPredictionModel import XgboostPredictionModel
-from models.PreselectedCloseData import PreselectedCloseData
+from models.PreselectedTickers import PreselectedTickers
 from models.MarketData import MarketData
+from models.WorstCaseOmega import WorstCaseOmega
 
 from plotly.io import show
 from pathlib import Path
@@ -20,16 +21,16 @@ end_date = '2025-01-01'
 market_data_dir = Path("data/tickers")
 
 market_data = MarketData(market_data_dir)
-lstm_model = SingleLstmPredictionModel(market_data.tickers)
-lstm_model.load_model("trained_models/single_lstm_model.keras")
-features = lstm_model.market_to_features_data(market_data)
+# lstm_model = SingleLstmPredictionModel(market_data.tickers)
+# lstm_model.load_model("trained_models/single_lstm_model.keras")
+# features = lstm_model.market_to_features_data(market_data)
 
 xgboost_model = XgboostPredictionModel(market_data.tickers)
-xgboost_model.load_model("trained_models")
+xgboost_model.load_model("trained_models/xgboost_ifa")
 xgboost_features = xgboost_model.market_to_features_data(market_data)
 
 market_data.crop_data(split_date, end_date)
-features.crop_data(split_date, end_date)
+# features.crop_data(split_date, end_date)
 xgboost_features.crop_data(split_date, end_date)
 
 prices = market_data.close_df
@@ -40,16 +41,16 @@ fitting_period = 60 # obliczanie mv na podstawie ostatnich 60 dni
 
 cv = WalkForward(train_size=fitting_period, test_size=holding_period)
 
-# transaction_cost = 0.001 / holding_period
-transaction_cost = 0
+transaction_cost = 0.001 / holding_period
+# transaction_cost = 0
 
 model1 = MeanRisk(risk_measure=RiskMeasure.VARIANCE)
 pred1 = cross_val_predict(model1, X, cv=cv, n_jobs=-1)
 pred1.name = "Mean Risk - solver CLARABEL"
 
-model2 = InverseVolatility()
+model2 = WorstCaseOmega(delta=0.8)
 pred2 = cross_val_predict(model2, X, cv=cv, n_jobs=-1)
-pred2.name = "Inverse Volatility - no TC"
+pred2.name = "Worst Case Omega - solver CLARABEL"
 
 model3 = EqualWeighted()
 pred3 = cross_val_predict(model3, X, cv=cv, n_jobs=-1)
@@ -60,43 +61,47 @@ pred4 = cross_val_predict(model4, X, cv=cv, n_jobs=-1)
 pred4.name = "Random - no TC"
 
 
-# LSTM MV
-print("Creating LSTM MV portfolios")
-model5 = MeanRisk(risk_measure=RiskMeasure.VARIANCE)
-pred5 = MultiPeriodPortfolio(name="LSTM MV")
+# # LSTM MV
+# print("Creating LSTM MV portfolios")
+# model5 = MeanRisk(risk_measure=RiskMeasure.VARIANCE)
+# pred5 = MultiPeriodPortfolio(name="LSTM MV")
 
-lstm_predictions = lstm_model.predict(features, verbose=0)
-print("Predictions done")
-preselected_data = PreselectedCloseData(lstm_predictions, 7)
+# lstm_predictions = lstm_model.predict(features, verbose=0)
+# print("Predictions done")
+# print(f"Features date range: {features.minimum_date} - {features.maximum_date}")
+# print(f"Predictions date range: {lstm_predictions.minimum_date} - {lstm_predictions.maximum_date}")
+# preselected_data = PreselectedCloseData(lstm_predictions, 7)
 
-previous_weights = None
-for train_idx, test_idx in tqdm(cv.split(X), 
-                                desc="Generating LSTM portfolios", 
-                                unit="portfolio",
-                                total=cv.get_n_splits(X)):
+# previous_weights = None
+# for train_idx, test_idx in tqdm(cv.split(X), 
+#                                 desc="Generating LSTM portfolios", 
+#                                 unit="portfolio",
+#                                 total=cv.get_n_splits(X)):
     
-    train_data = X.take(train_idx)
-    test_data = X.take(test_idx)
-    test_date = test_data.index[0]
+#     train_data = X.take(train_idx)
+#     test_data = X.take(test_idx)
+#     test_date = test_data.index[0]
 
-    preselected_train_data = preselected_data.filter_close_df(train_data, test_date)
-    preselected_test_data = preselected_data.filter_close_df(test_data, test_date)
-    model5.fit(preselected_train_data)
-    portfolio5 = model5.predict(preselected_test_data)
-    pred5.append(portfolio5)
+#     preselected_train_data = preselected_data.filter_close_df(train_data, test_date)
+#     preselected_test_data = preselected_data.filter_close_df(test_data, test_date)
+#     model5.fit(preselected_train_data)
+#     portfolio5 = model5.predict(preselected_test_data)
+#     pred5.append(portfolio5)
 
 # XGBoost MV
 print("Creating Xgboost portfolios")
-model6 = MeanRisk(risk_measure=RiskMeasure.VARIANCE)
+model6 = WorstCaseOmega(delta=0.8)
 pred6 = MultiPeriodPortfolio(name="Xgboost MV")
 
 xgboost_predictions = xgboost_model.predict(xgboost_features)
 print("Predictions done")
-preselected_data = PreselectedCloseData(xgboost_predictions, 7)
+print(f"Features date range: {xgboost_features.minimum_date} - {xgboost_features.maximum_date}")
+print(f"Predictions date range: {xgboost_predictions.minimum_date} - {xgboost_predictions.maximum_date}")
+preselected_tickers = PreselectedTickers(xgboost_predictions)
 
 previous_weights = None
 for train_idx, test_idx in tqdm(cv.split(X), 
-                                desc="Generating LSTM portfolios", 
+                                desc=f"Generating {pred6.name} portfolios", 
                                 unit="portfolio",
                                 total=cv.get_n_splits(X)):
     
@@ -104,13 +109,13 @@ for train_idx, test_idx in tqdm(cv.split(X),
     test_data = X.take(test_idx)
     test_date = test_data.index[0]
 
-    preselected_train_data = preselected_data.filter_close_df(train_data, test_date)
-    preselected_test_data = preselected_data.filter_close_df(test_data, test_date)
+    preselected_train_data = preselected_tickers.filter_close_df(train_data, test_date)
+    preselected_test_data = preselected_tickers.filter_close_df(test_data, test_date)
     model6.fit(preselected_train_data)
     portfolio6 = model6.predict(preselected_test_data)
     pred6.append(portfolio6)
 
 
-population = Population([pred1, pred2, pred5, pred6])
+population = Population([pred1, pred2, pred3, pred4, pred6])
 fig = population.plot_cumulative_returns()
 show(fig)

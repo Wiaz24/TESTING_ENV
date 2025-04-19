@@ -1,14 +1,24 @@
 from .PredictionsData import PredictionsData
 from dataclasses import dataclass, field
-from typing import Dict
 import pandas as pd
+import plotly.graph_objects as go
 
 @dataclass
-class PreselectedCloseData:
+class PreselectedTickers:
     predictions: PredictionsData = field(default=None, repr=False, init=True)
-    cardinality: int = field(default=8, repr=False, init=True)
+    cardinality: int = field(default=7, repr=False, init=True)
 
     _selected_tickers: pd.Series = field(default_factory=pd.Series, repr=False, init=False)
+
+    @property
+    def minimum_date(self) -> pd.Timestamp:
+        """Zwraca minimalną datę."""
+        return self._selected_tickers.index.min()
+    
+    @property
+    def maximum_date(self) -> pd.Timestamp:
+        """Zwraca maksymalną datę."""
+        return self._selected_tickers.index.max()
 
     def __post_init__(self):
         if self.cardinality <= 0:
@@ -17,7 +27,6 @@ class PreselectedCloseData:
         # Initialize the selected tickers
         self._selected_tickers = pd.Series(index=self.predictions.index_df, dtype=object)
         self._select_tickers()
-
 
     def _select_tickers(self):
         """
@@ -47,3 +56,40 @@ class PreselectedCloseData:
                 print(f"Warning: Ticker {ticker} not found in the provided dataframe.")
         filtered_df.index.name = "Date"
         return filtered_df
+    
+    def plot_selection_histogram(self) -> go.Figure:
+        """
+        Tworzy histogram pokazujący częstość wyboru poszczególnych tickerów.
+        
+        Returns:
+            go.Figure: Wykres Plotly przedstawiający histogram wyboru tickerów.
+        """
+        all_tickers = self.predictions.tickers
+        
+        # Tworzenie słownika zliczającego wystąpienia każdego tickera
+        ticker_counts = {ticker: 0 for ticker in all_tickers}
+        
+        # Zliczanie wystąpień tickerów w _selected_tickers
+        for selected_list in self._selected_tickers:
+            for ticker in selected_list:
+                if ticker in ticker_counts:
+                    ticker_counts[ticker] += 1
+                else:
+                    print(f"Warning: Ticker {ticker} not found in the all_tickers list.")
+        
+        # Tworzenie wykresu histogramu
+        fig = go.Figure(data=[go.Bar(
+            x=list(ticker_counts.keys()),
+            y=list(ticker_counts.values()),
+            marker=dict(color='blue')
+        )])
+        fig.update_layout(
+            title="Histogram wyboru tickerów",
+            xaxis_title="Tickery",
+            yaxis_title="Liczba wystąpień",
+            xaxis_tickangle=-45,
+            showlegend=False
+        )
+
+        return fig
+       

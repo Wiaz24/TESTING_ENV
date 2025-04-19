@@ -1,7 +1,7 @@
 
 from prediction_models.SingleLstmPredictionModel import SingleLstmPredictionModel
 from prediction_models.XgboostPredictionModel import XgboostPredictionModel
-from models.PreselectedCloseData import PreselectedCloseData
+from models.PreselectedTickers import PreselectedTickers
 from models.MarketData import MarketData
 
 from plotly.io import show
@@ -43,12 +43,12 @@ transaction_cost = 0
 print("Creating LSTM MV portfolios")
 model = MeanRisk(risk_measure=RiskMeasure.VARIANCE)
 portfolios: list[MultiPeriodPortfolio] = []
-preselected_datas: list[PreselectedCloseData] = []
+preselected_datas: list[PreselectedTickers] = []
 lstm_predictions = lstm_model.predict(features, verbose=0)
 
 for i in range(5, 11):
     portfolios.append(MultiPeriodPortfolio(name=f"LSTM MV cardinality = {i}"))
-    preselected_datas.append(PreselectedCloseData(lstm_predictions, i))
+    preselected_datas.append(PreselectedTickers(lstm_predictions, i))
 
 
 print("Predictions done")

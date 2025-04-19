@@ -8,7 +8,8 @@ from .MarketData import MarketData
 class FeaturesData:
     _market_data: MarketData = field(default=None, repr=True, init=True)
     _features: List[str] = field(default_factory=list, repr=True, init=False)
-    _targets: List[str] = field(default_factory=list, repr=True, init=False)
+    _target: str = field(default_factory=list, repr=True, init=False)
+    _target_lag: int = field(default=1, repr=True, init=False)
     _dataframes: Dict[str, pd.DataFrame] = field(default_factory=dict, repr=False, init=False)
 
     def __post_init__(self):
@@ -30,14 +31,19 @@ class FeaturesData:
         return self._features.copy()
     
     @property
-    def targets(self) -> List[str]:
-        """Zwraca listę celów."""
-        return self._targets.copy()
+    def target(self) -> str:
+        """Zwraca cel."""
+        return self._target
+    
+    @property
+    def target_lag(self) -> int:
+        """Zwraca opóźnienie celu."""
+        return self._target_lag
     
     @property
     def market_data(self) -> MarketData:
         """Zwraca obiekt MarketData."""
-        return self._market_data.copy()
+        return self._market_data
     
     @property
     def minimum_date(self) -> pd.Timestamp:
@@ -80,9 +86,9 @@ class FeaturesData:
 
     def add_target(self, name: str, func: Callable[[pd.DataFrame], pd.Series]):
         """
-        Add a target to the targets list and apply it to all dataframes.
+        Add a target and apply it to all dataframes.
         """
-        self._targets.append(name)
+        self._target = name
         for ticker in self.tickers:
             if ticker not in self._dataframes:
                 raise ValueError(f"Dataframe for ticker {ticker} is empty.")
@@ -118,7 +124,7 @@ class FeaturesData:
         """
         features_data = FeaturesData(self._market_data)
         features_data._features = self._features.copy()
-        features_data._targets = self._targets.copy()
+        features_data._target = self._target
         features_data._dataframes = {ticker: df.copy() for ticker, df in self._dataframes.items()}
         return features_data
 
@@ -142,35 +148,36 @@ class FeaturesData:
             raise ValueError(f"Ticker {ticker} not found in the dataset.")
         return self._dataframes[ticker].loc[:, self.features].copy()
     
-    def get_targets_for_ticker(self, ticker: str) -> pd.DataFrame:
+    def get_target_for_ticker(self, ticker: str) -> pd.DataFrame:
         """
         Get targets for a specific ticker.
         """
         if ticker not in self.tickers:
             raise ValueError(f"Ticker {ticker} not found in the dataset.")
-        return self._dataframes[ticker].loc[:, self.targets].copy()
+        return self._dataframes[ticker].loc[:, self.target].copy()
 
     def get_features_for_day(self, day: pd.Timestamp) -> 'FeaturesData':
         """
         Get features for a specific day for all tickers.
         """
         features = FeaturesData(self.tickers)
-        features.features = self.features
-        features.targets = self.targets
+        features._features = self.features
+        features._target = self.target
+        features._target_lag = self.target_lag
 
         for ticker in self.tickers:
-            features.dataframes[ticker] = self.dataframes[ticker].loc[day]
-            features.dataframes[ticker].sort_index(inplace=True)
+            features._dataframes[ticker] = self._dataframes[ticker].loc[day]
+            features._dataframes[ticker].sort_index(inplace=True)
         return features
     
-    def get_targets_for_day(self, day: pd.Timestamp) -> dict[str, pd.DataFrame]:
-        """
-        Get targets for a specific day for all tickers.
-        """
-        targets = {}
-        for ticker in self.tickers:
-            targets[ticker] = self.dataframes[ticker].loc[day]
-        return targets
+    # def get_target_for_day(self, day: pd.Timestamp) -> dict[str, pd.DataFrame]:
+    #     """
+    #     Get targets for a specific day for all tickers.
+    #     """
+    #     targets = {}
+    #     for ticker in self.tickers:
+    #         targets[ticker] = self._dataframes[ticker].loc[day]
+    #     return targets
 
     def check_for_inf(self) -> bool:
         """

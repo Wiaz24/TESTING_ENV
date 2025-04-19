@@ -163,7 +163,7 @@ class XgboostPredictionModel(IPredictionModel):
             if ticker in features.tickers:
                 random_samples = np.random.choice(features.df_index, samples_per_ticker, replace=False)
                 X_samples.append(features.get_features_for_ticker(ticker).loc[random_samples])
-                y_samples.append(features.get_targets_for_ticker(ticker).loc[random_samples])
+                y_samples.append(features.get_target_for_ticker(ticker).loc[random_samples])
             else:
                 raise ValueError(f"Data for ticker {ticker} not found in the provided datasets.")
             
@@ -494,12 +494,15 @@ class XgboostPredictionModel(IPredictionModel):
                 
                 # Trenujemy model na danych dla danego tickera
                 self.models[ticker].fit(features.get_features_for_ticker(ticker), 
-                                        features.get_targets_for_ticker(ticker))                         
+                                        features.get_target_for_ticker(ticker))                         
             else:
                 raise ValueError(f"Data for ticker {ticker} not found in the provided datasets.")
             
     def predict(self, features: FeaturesData) -> PredictionsData:
-        predictions = PredictionsData(_index = features.df_index, _tickers = features.tickers)
+        # Tworzymy nowy indeks przesunięty o 1 próbkę w przód
+        shifted_index = self._generate_shifted_index(features.df_index, 1)
+        
+        predictions = PredictionsData(_index = shifted_index, _tickers = features.tickers)
         for ticker in self.tickers:
             if ticker not in features.tickers:
                 print(f"Ostrzeżenie: Brak danych dla tickera {ticker}")
@@ -507,32 +510,16 @@ class XgboostPredictionModel(IPredictionModel):
                 
             try:
                 X_ticker = features.get_features_for_ticker(ticker)
-                y_ticker = features.get_targets_for_ticker(ticker)
+                y_ticker = features.get_target_for_ticker(ticker)
 
                 # Make predictions
                 predictions_raw = self.models[ticker].predict(X_ticker)
-                
-                # Ensure index length matches predictions length
-                if len(predictions_raw) != len(features.df_index):
-                    print(f"Ostrzeżenie: Długość predykcji ({len(predictions_raw)}) nie zgadza się z długością indeksu ({len(features.df_index)}) dla {ticker}")
-                    # Use only common indices
-                    min_length = min(len(predictions_raw), len(features.df_index))
-                    predictions_series = pd.Series(predictions_raw[:min_length], index=features.df_index[:min_length])
-                else:
-                    predictions_series = pd.Series(predictions_raw, index=features.df_index)
-                
+                predictions_series = pd.Series(predictions_raw, index=shifted_index)
                 predictions.add_prediction(ticker, predictions_series)
                 
-                # Add correct data - ensure same shape
-                if len(y_ticker) != len(features.df_index):
-                    print(f"Ostrzeżenie: Długość danych rzeczywistych ({len(y_ticker)}) nie zgadza się z długością indeksu ({len(features.df_index)}) dla {ticker}")
-                    min_length = min(len(y_ticker), len(features.df_index))
-                    y_values = y_ticker.values.flatten()[:min_length]
-                    correct_data_series = pd.Series(y_values, index=features.df_index[:min_length])
-                else:
-                    correct_data_series = pd.Series(y_ticker.values.flatten(), index=features.df_index)
-                
+                correct_data_series = pd.Series(y_ticker.values.flatten(), index=shifted_index)
                 predictions.add_correct_data(ticker, correct_data_series)
+
             except Exception as e:
                 print(f"Błąd podczas przewidywania dla {ticker}: {str(e)}")
                 # Create dummy data to maintain consistency
