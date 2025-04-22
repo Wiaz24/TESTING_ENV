@@ -7,12 +7,10 @@ from models.PredictionBasedWorstCaseOmega import PredictionBasedWorstCaseOmega
 
 from plotly.io import show
 from pathlib import Path
-from skfolio import MultiPeriodPortfolio, Population, Portfolio, RiskMeasure
-from skfolio.datasets import load_sp500_dataset
-from skfolio.model_selection import WalkForward, cross_val_predict
+from skfolio import MultiPeriodPortfolio, Population, RiskMeasure
+from skfolio.model_selection import WalkForward
 from skfolio.optimization import MeanRisk, BaseOptimization
 from skfolio.preprocessing import prices_to_returns
-import pandas as pd
 from tqdm import tqdm
 
 start_date = '2010-01-01'
@@ -21,8 +19,8 @@ end_date = '2025-01-01'
 market_data_dir = Path("data/tickers")
 
 market_data = MarketData(market_data_dir)
-model = SingleLstmPredictionModel(market_data.tickers)
-model.load_model("trained_models/single_lstm/single_lstm_model.keras")
+model = XgboostPredictionModel(market_data.tickers)
+model.load_model("trained_models/xgboost_normalized")
 features = model.market_to_features_data(market_data)
 
 market_data.crop_data(split_date, end_date)
@@ -66,7 +64,7 @@ print("Predictions done")
 
 previous_weights = None
 for train_idx, test_idx in tqdm(cv.split(X), 
-                                desc="Generating LSTM portfolios", 
+                                desc="Generating portfolios", 
                                 unit="portfolio",
                                 total=cv.get_n_splits(X)):
     

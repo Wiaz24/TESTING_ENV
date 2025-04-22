@@ -124,3 +124,16 @@ class MarketData:
         # Ustalanie nowych dat
         self._set_dates(True)
 
+    def copy(self) -> 'MarketData':
+        """
+        Zwraca kopię obiektu MarketData.
+        """
+        new_data = MarketData(self.data_dir)
+        new_data._tickers = self._tickers.copy()
+        new_data._features = self._features.copy()
+        new_data._minimum_date = self._minimum_date
+        new_data._maximum_date = self._maximum_date
+        new_data._dataframes = {ticker: df.copy() for ticker, df in self._dataframes.items()}
+        return new_data
+
+

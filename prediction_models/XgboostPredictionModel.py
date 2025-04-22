@@ -1,5 +1,5 @@
 from sklearn.model_selection import GridSearchCV
-import xgboost as xgb
+from xgboost import XGBRegressor
 from .IPredictionModel import *
 import pandas as pd
 import pandas_ta as ta
@@ -24,7 +24,8 @@ class XgboostPredictionModel(IPredictionModel):
 
     def __init__(self, tickers: list[str]):
         self.tickers = tickers
-        self.models: dict[str, xgb.XGBRegressor] = {}
+        self.models: dict[str, XGBRegressor] = {}
+        self.eval_metric = 'rmse'
         self.global_best_params = None
         self.param_ranges = {
             'n_estimators': (50, 500),
@@ -40,8 +41,8 @@ class XgboostPredictionModel(IPredictionModel):
 
         for ticker in self.tickers:
             # Initialize the model for each ticker
-            self.models[ticker] = xgb.XGBRegressor()
-            self.models[ticker].set_params(objective='reg:squarederror')
+            self.models[ticker] = XGBRegressor(objective='reg:squarederror',
+                                                eval_metric=self.eval_metric,)
 
     def load_model(self, model_path: Path):
         if not isinstance(model_path, Path):
@@ -49,7 +50,7 @@ class XgboostPredictionModel(IPredictionModel):
         for model_file in list(model_path.glob("*.json")):
             ticker = model_file.stem
             if ticker in self.models:
-                self.models[ticker] = xgb.XGBRegressor()
+                self.models[ticker] = XGBRegressor()
                 self.models[ticker].load_model(model_file)
             else:
                 raise ValueError(f"Model for ticker {ticker} not found in the loaded models.")   
@@ -97,6 +98,7 @@ class XgboostPredictionModel(IPredictionModel):
         features.add_target(name='next_day_log_return',
                                 func=lambda df: np.log(df['Close'].shift(-1) / df['Close']))
 
+        features.normalize(lower=-1, upper=1)
         return features
     
     def _perform_global_grid_search(self, features: FeaturesData, samples_per_ticker: int = 100):
@@ -107,7 +109,7 @@ class XgboostPredictionModel(IPredictionModel):
             if ticker in features.tickers:
                 random_samples = np.random.choice(features.df_index, samples_per_ticker, replace=False)
                 X_samples.append(features.get_features_for_ticker(ticker).loc[random_samples])
-                y_samples.append(features.get_targets_for_ticker(ticker).loc[random_samples])
+                y_samples.append(features.get_target_for_ticker(ticker).loc[random_samples])
             else:
                 raise ValueError(f"Data for ticker {ticker} not found in the provided datasets.")
             
@@ -128,8 +130,9 @@ class XgboostPredictionModel(IPredictionModel):
             'min_child_weight': [1]
         }
 
-        xgb_model = xgb.XGBRegressor(
+        xgb_model = XGBRegressor(
             objective='reg:squarederror',
+            eval_metric=self.eval_metric,
             random_state=42
         )
 
@@ -222,8 +225,9 @@ class XgboostPredictionModel(IPredictionModel):
                     params[param_name] = firefly.position[j]
             
             # Tworzenie i trenowanie modelu z danymi parametrami
-            model = xgb.XGBRegressor(
+            model = XGBRegressor(
                 objective='reg:squarederror', 
+                eval_metric=self.eval_metric,
                 random_state=42,
                 **params
             )
@@ -286,8 +290,9 @@ class XgboostPredictionModel(IPredictionModel):
                         else:
                             params[param_name] = fireflies[i].position[j]
                     
-                    model = xgb.XGBRegressor(
+                    model = XGBRegressor(
                         objective='reg:squarederror', 
+                        eval_metric=self.eval_metric,
                         random_state=42,
                         **params
                     )
@@ -344,8 +349,9 @@ class XgboostPredictionModel(IPredictionModel):
                     else:
                         params[param_name] = fireflies[i].position[j]
                 
-                model = xgb.XGBRegressor(
+                model = XGBRegressor(
                     objective='reg:squarederror', 
+                    eval_metric=self.eval_metric,
                     random_state=42,
                     **params
                 )
@@ -422,8 +428,9 @@ class XgboostPredictionModel(IPredictionModel):
                     else:
                         params[param_name] = fireflies[i].position[j]
                 
-                model = xgb.XGBRegressor(
+                model = XGBRegressor(
                     objective='reg:squarederror', 
+                    eval_metric=self.eval_metric,
                     random_state=42,
                     **params
                 )
@@ -467,17 +474,6 @@ class XgboostPredictionModel(IPredictionModel):
         return best_params
 
     def fit(self, features: FeaturesData, use_ifa=False):
-        """
-        Trenowanie modelu XGBoost dla każdego tickera
-        
-        Parameters:
-        -----------
-        features : FeaturesData
-            Dane wejściowe i wyjściowe
-        use_ifa : bool, optional (default=False)
-            Jeśli True, używa Improved Firefly Algorithm do optymalizacji hiperparametrów
-            Jeśli False, używa Grid Search
-        """
         if use_ifa:
             self._perform_ifa_optimization(features)
         else:
@@ -487,8 +483,9 @@ class XgboostPredictionModel(IPredictionModel):
             if ticker in features.tickers:
                 # Jeśli znaleziono globalne optymalne parametry, używamy ich
                 if self.global_best_params:
-                    self.models[ticker] = xgb.XGBRegressor(
+                    self.models[ticker] = XGBRegressor(
                         objective='reg:squarederror',
+                        eval_metric=self.eval_metric,
                         **self.global_best_params
                     )
                 
@@ -498,7 +495,7 @@ class XgboostPredictionModel(IPredictionModel):
             else:
                 raise ValueError(f"Data for ticker {ticker} not found in the provided datasets.")
             
-    def predict(self, features: FeaturesData) -> PredictionsData:
+    def predict(self, features: FeaturesData, verbose: str = "auto") -> PredictionsData:
         # Tworzymy nowy indeks przesunięty o 1 próbkę w przód
         shifted_index = self._generate_shifted_index(features.df_index, 1)
         
@@ -515,10 +512,14 @@ class XgboostPredictionModel(IPredictionModel):
                 # Make predictions
                 predictions_raw = self.models[ticker].predict(X_ticker)
                 predictions_series = pd.Series(predictions_raw, index=shifted_index)
+                # denormalized_predictions = features.denormalize_data(predictions_series, ticker)
                 predictions.add_prediction(ticker, predictions_series)
                 
                 correct_data_series = pd.Series(y_ticker.values.flatten(), index=shifted_index)
+                # denormalized_correct_data = features.denormalize_data(correct_data_series, ticker)
                 predictions.add_correct_data(ticker, correct_data_series)
+
+                # Denormalize the predictions
 
             except Exception as e:
                 print(f"Błąd podczas przewidywania dla {ticker}: {str(e)}")

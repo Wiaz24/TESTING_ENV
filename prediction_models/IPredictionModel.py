@@ -23,7 +23,7 @@ class IPredictionModel(ABC):
         pass
 
     @abstractmethod
-    def predict(self, features: FeaturesData) -> PredictionsData:
+    def predict(self, features: FeaturesData, verbose: str = "auto") -> PredictionsData:
         pass
 
     @abstractmethod

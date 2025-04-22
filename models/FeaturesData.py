@@ -3,6 +3,7 @@ from typing import List, Dict, Callable
 from pathlib import Path
 import pandas as pd
 from .MarketData import MarketData
+from sklearn.preprocessing import MinMaxScaler
 
 @dataclass
 class FeaturesData:
@@ -11,6 +12,9 @@ class FeaturesData:
     _target: str = field(default_factory=list, repr=True, init=False)
     _target_lag: int = field(default=1, repr=True, init=False)
     _dataframes: Dict[str, pd.DataFrame] = field(default_factory=dict, repr=False, init=False)
+
+    _is_normalized: bool = field(default=False, repr=True, init=False)
+    _scalers: Dict[str, Dict[str, MinMaxScaler]] = field(default_factory=dict, repr=False, init=False)
 
     def __post_init__(self):
         if self._market_data is None:
@@ -71,6 +75,21 @@ class FeaturesData:
         if self._dataframes:
             return next(iter(self._dataframes.values())).index
         return pd.Index([])
+    
+    @property
+    def dataframes(self) -> Dict[str, pd.DataFrame]:
+        """Zwraca słownik dataframe'ów."""
+        return {ticker: df.copy() for ticker, df in self._dataframes.items()}
+    
+    @property
+    def is_normalized(self) -> bool:
+        """Zwraca informację, czy dane są znormalizowane."""
+        return self._is_normalized
+    
+    @property
+    def scalers(self) -> Dict[str, Dict[str, MinMaxScaler]]:
+        """Zwraca słownik scalerów."""
+        return {ticker: scaler.copy() for ticker, scaler in self._scalers.items()}
 
     def add_feature(self, name: str, func: Callable[[pd.DataFrame], pd.Series]):
         """
@@ -125,6 +144,10 @@ class FeaturesData:
         features_data = FeaturesData(self._market_data)
         features_data._features = self._features.copy()
         features_data._target = self._target
+        features_data._target_lag = self._target_lag
+        features_data._is_normalized = self._is_normalized
+        features_data._scalers = {ticker: scaler.copy() for ticker, scaler in self._scalers.items()}
+        features_data._market_data = self._market_data
         features_data._dataframes = {ticker: df.copy() for ticker, df in self._dataframes.items()}
         return features_data
 
@@ -170,15 +193,6 @@ class FeaturesData:
             features._dataframes[ticker].sort_index(inplace=True)
         return features
     
-    # def get_target_for_day(self, day: pd.Timestamp) -> dict[str, pd.DataFrame]:
-    #     """
-    #     Get targets for a specific day for all tickers.
-    #     """
-    #     targets = {}
-    #     for ticker in self.tickers:
-    #         targets[ticker] = self._dataframes[ticker].loc[day]
-    #     return targets
-
     def check_for_inf(self) -> bool:
         """
         Check if any of the dataframes contain infinite values.
@@ -198,3 +212,44 @@ class FeaturesData:
                 print(f"NaN values found in {ticker}")
                 return True
         return False
+    
+    def normalize(self, lower: float = -1, upper: float = 1):
+        """
+        Normalize the dataframes using MinMaxScaler.
+        """
+        if self._is_normalized:
+            raise ValueError("Data is already normalized.")
+        
+        for ticker in self.tickers:
+            df = self._dataframes[ticker].copy()
+            self._scalers[ticker] = {}
+
+            for feature in self.features:
+                if feature not in df.columns:
+                    raise ValueError(f"Feature {feature} not found in dataframe for ticker {ticker}.")
+                scaler = MinMaxScaler(feature_range=(lower, upper))
+                df[feature] = scaler.fit_transform(df[[feature]])
+                self._scalers[ticker][feature] = scaler
+
+            self._dataframes[ticker] = df
+        self._is_normalized = True
+
+    # def denormalize_data(self, data: pd.DataFrame | pd.Series, ticker: str) -> pd.DataFrame:
+    #     """
+    #     Denormalize all columns of provided dataframe or Series using the scaler for the specified ticker and target column.
+    #     """
+    #     if ticker not in self.tickers:
+    #         raise ValueError(f"Ticker {ticker} not found in the dataset.")
+    #     if ticker not in self._scalers:
+    #         raise ValueError(f"Scaler for ticker {ticker} not found.")
+        
+    #     if not isinstance(data, pd.DataFrame) and not isinstance(data, pd.Series):
+    #         raise ValueError("Data must be a DataFrame or Series.")
+    #     scaler = self._scalers[ticker][self.target]
+    #     if isinstance(data, pd.DataFrame):
+    #         for col in data.columns:
+    #             data[col] = scaler.inverse_transform(data[[col]])
+    #         return data
+    #     elif isinstance(data, pd.Series):
+    #         unscaled_data = scaler.inverse_transform(data.values.reshape(-1, 1)).flatten()
+    #         return pd.Series(unscaled_data, index=data.index, name=self.target)

@@ -1,8 +1,6 @@
 from prediction_models.XgboostPredictionModel import XgboostPredictionModel
 from prediction_models.SingleLstmPredictionModel import SingleLstmPredictionModel
 from models.MarketData import MarketData
-
-from sklearn.model_selection import train_test_split
 import pandas as pd
 
 start_date = '2010-01-01'
@@ -23,5 +21,5 @@ model.fit(train_features)
 predictions = model.predict(test_features)
 metrics = predictions.metrics_df
 print(metrics)
-metrics.to_csv("single_lstm.csv")
-model.save_model("trained_models/single_lstm")
+metrics.to_csv("lstm_mae.csv")
+model.save_model("trained_models/lstm_mae")

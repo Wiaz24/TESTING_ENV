@@ -19,7 +19,7 @@ class SingleLstmPredictionModel(IPredictionModel):
         self.learning_rate = 0.001
         self.dropout = 0.1
         self.recurrent_dropout = 0.2
-        self.loss_function = 'mean_squared_error'
+        self.loss_function = 'mean_absolute_error'
 
         self.epochs = 100
         self.batch_size = 100
@@ -28,9 +28,11 @@ class SingleLstmPredictionModel(IPredictionModel):
         self._init_lstm_model()
 
     def load_model(self, model_file: Path):
-        if not os.path.exists(model_file):
+        if not isinstance(model_file, Path):
+            model_file = Path(model_file)
+        if not model_file.exists():
             raise FileNotFoundError(f"Model file {model_file} does not exist.")
-        if not model_file.endswith('.keras'):
+        if not model_file.suffix == ".keras":
             raise ValueError(f"Model file {model_file} is not a .keras file.")
         self.model = load_model(model_file)
 
@@ -53,7 +55,8 @@ class SingleLstmPredictionModel(IPredictionModel):
         
         lstm_layer = LSTM(self.hidden_nodes,
                         recurrent_dropout=self.recurrent_dropout, 
-                        dropout=self.dropout)(input_layer)
+                        dropout=self.dropout,
+                        activation='relu')(input_layer)
         
         output_layer = Dense(1, activation='linear')(lstm_layer)
         
