@@ -93,7 +93,6 @@ class PredictionsData:
         pred_df.index.name = 'Date'
         return pred_df
             
-    
     @property
     def dataframes(self) -> Dict[str, pd.DataFrame]:
         """
@@ -101,6 +100,28 @@ class PredictionsData:
         """
         # Zwracamy kopie aby zapobiec modyfikacji z zewnątrz
         return {ticker: df.copy() for ticker, df in self._dataframes.items()}
+    
+    @property
+    def check_for_nan(self) -> bool:
+        """
+        Sprawdza czy w dataframe'ach są wartości NaN.
+        """
+        for df in self._dataframes.values():
+            if df.isnull().values.any():
+                print(f"NaN rows in {df.index[df.isnull().any(axis=1)]}")
+                return True
+        return False
+    
+    @property
+    def check_for_inf(self) -> bool:
+        """
+        Sprawdza czy w dataframe'ach są wartości Inf.
+        """
+        for df in self._dataframes.values():
+            if np.isinf(df.values).any():
+                return True
+        return False
+
     def add_prediction(self, ticker: str, prediction: pd.Series):
         """
         Add a prediction for a specific ticker.

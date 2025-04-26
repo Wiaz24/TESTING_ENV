@@ -19,7 +19,7 @@ class IPredictionModel(ABC):
         pass
 
     @abstractmethod
-    def fit(self, features: FeaturesData):
+    def fit(self, features: FeaturesData, val_features: FeaturesData = None): 
         pass
 
     @abstractmethod

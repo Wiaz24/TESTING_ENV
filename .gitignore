@@ -3,5 +3,6 @@
 **/*.keras
 **/*.h5
 **/*.png
+**/*.html
 __pycache__/
 .vscode/

@@ -11,12 +11,13 @@ from models.PredictionBasedWorstCaseOmega import PredictionBasedWorstCaseOmega
 from prediction_models.IPredictionModel import IPredictionModel
 from prediction_models.SingleLstmPredictionModel import SingleLstmPredictionModel
 from prediction_models.XgboostPredictionModel import XgboostPredictionModel
+from prediction_models.EnsemblePredictionModel import EnsemblePredictionModel
 from skfolio.model_selection import WalkForward, cross_val_predict
 from skfolio.optimization import MeanRisk, ObjectiveFunction, InverseVolatility, EqualWeighted, Random
 from skfolio.preprocessing import prices_to_returns
 
 start_date = pd.Timestamp('2010-01-01')
-split_date = pd.Timestamp('2018-01-04')
+split_date = pd.Timestamp('2020-01-04')
 end_date = pd.Timestamp('2025-01-01')
 market_data_dir = Path("data/tickers")
 
@@ -29,7 +30,8 @@ market_data.crop_data(split_date, end_date)
 
 prediction_models: dict[IPredictionModel, Path] = {
     SingleLstmPredictionModel(market_data.tickers): Path("trained_models/lstm_mae/single_lstm_model.keras"),
-    XgboostPredictionModel(market_data.tickers): Path("trained_models/xgboost_normalized")
+    XgboostPredictionModel(market_data.tickers): Path("trained_models/xgboost_normalized"),
+    EnsemblePredictionModel(market_data.tickers): Path("trained_models/ensemble2/ensemble_model.keras")
 }
 
 X = prices_to_returns(market_data.close_df)
@@ -37,10 +39,10 @@ cv = WalkForward(train_size=fitting_period, test_size=holding_period)
 
 portfolio_models: list[ObjectiveFunction] = [
     MeanRisk(risk_measure=RiskMeasure.VARIANCE),
-    WorstCaseOmega(delta=0.8),
-    InverseVolatility(),
-    EqualWeighted(),
-    Random()
+    WorstCaseOmega(delta=0.8)
+    # InverseVolatility(),
+    # EqualWeighted(),
+    # Random()
 ]
 
 population = Population([])
@@ -95,4 +97,10 @@ for pred_model, path in prediction_models.items():
     population.append(pred_based_mpportfolio)
 
 fig = population.plot_cumulative_returns()
-show(fig)
+# show(fig)
+fig.write_html(f"benchmark_results.html")
+    
+# Wyświetlenie podsumowania wyników w danym okresie
+print(f"\nPodsumowanie wyników:")
+summary_df = population.summary().transpose()
+print(summary_df[['Mean', 'Variance', 'MAX Drawdown', 'Sharpe Ratio']].sort_values('Sharpe Ratio', ascending=False))
