@@ -8,10 +8,13 @@ from models.MarketData import MarketData
 from models.PreselectedTickers import PreselectedTickers
 from models.WorstCaseOmega import WorstCaseOmega
 from models.PredictionBasedWorstCaseOmega import PredictionBasedWorstCaseOmega
+
 from prediction_models.IPredictionModel import IPredictionModel
 from prediction_models.SingleLstmPredictionModel import SingleLstmPredictionModel
 from prediction_models.XgboostPredictionModel import XgboostPredictionModel
 from prediction_models.EnsemblePredictionModel import EnsemblePredictionModel
+from prediction_models.CnnLstmPredictionModel import CnnLstmPredictionModel
+
 from skfolio.model_selection import WalkForward, cross_val_predict
 from skfolio.optimization import MeanRisk, ObjectiveFunction, InverseVolatility, EqualWeighted, Random
 from skfolio.preprocessing import prices_to_returns
@@ -31,7 +34,8 @@ market_data.crop_data(split_date, end_date)
 prediction_models: dict[IPredictionModel, Path] = {
     SingleLstmPredictionModel(market_data.tickers): Path("trained_models/lstm_mae/single_lstm_model.keras"),
     XgboostPredictionModel(market_data.tickers): Path("trained_models/xgboost_normalized"),
-    EnsemblePredictionModel(market_data.tickers): Path("trained_models/ensemble2/ensemble_model.keras")
+    EnsemblePredictionModel(market_data.tickers): Path("trained_models/ensemble2/ensemble_model.keras"),
+    CnnLstmPredictionModel(market_data.tickers): Path("trained_models/CnnLstmPredictionModel/cnn_lstm_model.keras"),
 }
 
 X = prices_to_returns(market_data.close_df)

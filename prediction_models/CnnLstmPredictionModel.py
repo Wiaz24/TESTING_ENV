@@ -225,29 +225,63 @@ class CnnLstmPredictionModel(IPredictionModel):
             try:
                 X_ticker = features.get_features_for_ticker(ticker)
                 correct_prices_series = features.get_target_for_ticker(ticker)
+                
+                # Pobierz aktualną cenę zamknięcia ('Close_0')
+                current_close_prices = X_ticker['Close_0']
+
+                # Sprawdź, czy są jakieś braki danych
+                if current_close_prices.isna().any():
+                    print(f"NaN values found in current_close_prices for {ticker}: {current_close_prices[current_close_prices.isna()]}")
+                
+                if correct_prices_series.isna().any():
+                    print(f"NaN values found in correct_prices_series for {ticker}: {correct_prices_series[correct_prices_series.isna()]}")
 
                 # Przygotuj tensor dla tego tickera
                 X_input = self._feature_to_tensor(X_ticker)
                 
-                # Przewiduj na podstawie tensora - musimy użyć reshape, aby spłaszczyć pierwszy wymiar
+                # Przewiduj na podstawie tensora
                 predicted_prices = self.model.predict(X_input, verbose=0 if verbose == "auto" else verbose)
                 
-                # W przypadku gdy predicted_prices ma kształt (n, 1), musimy go spłaszczyć do (n,)
+                # Spłaszcz wyniki predykcji jeśli potrzeba
                 if len(predicted_prices.shape) > 1 and predicted_prices.shape[1] == 1:
                     predicted_prices = predicted_prices.flatten()
                     
                 # Konwersja na serię z odpowiednim indeksem
                 predicted_prices_series = pd.Series(predicted_prices, index=X_ticker.index)
+                
+                # Sprawdź, czy są NaN w przewidywanych cenach
+                if predicted_prices_series.isna().any():
+                    print(f"NaN values found in predicted_prices_series for {ticker}: {predicted_prices_series[predicted_prices_series.isna()]}")
 
-                if (correct_prices_series.index == predicted_prices_series.index).all() is False:
-                    raise ValueError(f"Index mismatch between predicted and actual prices for {ticker}")
+                # Oblicz logarytmiczny zwrot na podstawie aktualnej ceny i przewidywanej ceny
+                predicted_log_returns = np.log(predicted_prices_series / current_close_prices)
+                
+                # Oblicz rzeczywisty logarytmiczny zwrot
+                correct_log_returns = np.log(correct_prices_series / current_close_prices)
+                
+                # Sprawdź, czy są NaN w zwrotach
+                if predicted_log_returns.isna().any():
+                    print(f"NaN values in predicted_log_returns for {ticker}: {predicted_log_returns[predicted_log_returns.isna()]}")
+                    # Zastąp wartości NaN średnią z reszty danych lub usuń te dni
+                    predicted_log_returns = predicted_log_returns.fillna(predicted_log_returns.mean())
+                    
+                if correct_log_returns.isna().any():
+                    print(f"NaN values in correct_log_returns for {ticker}: {correct_log_returns[correct_log_returns.isna()]}")
+                    # Zastąp wartości NaN średnią z reszty danych lub usuń te dni
+                    correct_log_returns = correct_log_returns.fillna(correct_log_returns.mean())
 
-                correct_log_returns = np.log(correct_prices_series / correct_prices_series.shift(1))
-                predicted_log_returns = np.log(predicted_prices_series / correct_prices_series.shift(1))
-
-                # Change index to shifted index
-                predicted_returns_with_future_index = pd.Series(predicted_log_returns, index=shifted_index)
-                actual_returns_with_future_index = pd.Series(correct_log_returns, index=shifted_index)
+                # Zmień indeks na przesunięty indeks (reprezentujący jutrzejszy dzień)
+                predicted_returns_with_future_index = pd.Series(predicted_log_returns.values, index=shifted_index)
+                actual_returns_with_future_index = pd.Series(correct_log_returns.values, index=shifted_index)
+                
+                # Dodatkowe sprawdzenie NaN
+                if predicted_returns_with_future_index.isna().any():
+                    print(f"NaN still present in predicted_returns_with_future_index for {ticker}")
+                    predicted_returns_with_future_index = predicted_returns_with_future_index.fillna(0)
+                    
+                if actual_returns_with_future_index.isna().any():
+                    print(f"NaN still present in actual_returns_with_future_index for {ticker}")
+                    actual_returns_with_future_index = actual_returns_with_future_index.fillna(0)
 
                 predictions.add_prediction(ticker, predicted_returns_with_future_index)
                 predictions.add_correct_data(ticker, actual_returns_with_future_index)
@@ -259,10 +293,21 @@ class CnnLstmPredictionModel(IPredictionModel):
                 predictions.add_prediction(ticker, dummy_series)
                 predictions.add_correct_data(ticker, dummy_series)
         
+        # Sprawdź, czy są NaN w końcowych predykcjach
         if predictions.check_for_nan:
-            print("Warning: NaN values found in predictions")
+            print("Warning: NaN values found in predictions after processing")
+            # Dodatkowe sprawdzenie i naprawienie każdego DataFrame
+            for ticker, df in predictions._dataframes.items():
+                if df.isna().any().any():
+                    print(f"Fixing NaN values for ticker {ticker}")
+                    df.fillna(0, inplace=True)
+        
         if predictions.check_for_inf:
             print("Warning: Inf values found in predictions")
+            # Możesz również naprawić wartości Inf
+            for ticker, df in predictions._dataframes.items():
+                df.replace([np.inf, -np.inf], 0, inplace=True)
+        
         return predictions
         
     def _generate_shifted_index(self, index: pd.Index, shift: int) -> pd.Index:
