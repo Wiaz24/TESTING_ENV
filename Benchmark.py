@@ -14,6 +14,7 @@ from prediction_models.SingleLstmPredictionModel import SingleLstmPredictionMode
 from prediction_models.XgboostPredictionModel import XgboostPredictionModel
 from prediction_models.EnsemblePredictionModel import EnsemblePredictionModel
 from prediction_models.CnnLstmPredictionModel import CnnLstmPredictionModel
+from prediction_models.ProphetPredictionModel import ProphetPredictionModel
 
 from skfolio.model_selection import WalkForward, cross_val_predict
 from skfolio.optimization import MeanRisk, ObjectiveFunction, InverseVolatility, EqualWeighted, Random
@@ -23,6 +24,7 @@ start_date = pd.Timestamp('2010-01-01')
 split_date = pd.Timestamp('2020-01-04')
 end_date = pd.Timestamp('2025-01-01')
 market_data_dir = Path("data/tickers")
+models_dir = Path("trained_models")
 
 holding_period = 1  # obliczanie mv co 1 dzień
 fitting_period = 60 # obliczanie mv na podstawie ostatnich 60 dni
@@ -31,18 +33,19 @@ market_data = MarketData(market_data_dir)
 full_market_data = market_data.copy()
 market_data.crop_data(split_date, end_date)
 
-prediction_models: dict[IPredictionModel, Path] = {
-    SingleLstmPredictionModel(market_data.tickers): Path("trained_models/lstm_mae/single_lstm_model.keras"),
-    XgboostPredictionModel(market_data.tickers): Path("trained_models/xgboost_normalized"),
-    EnsemblePredictionModel(market_data.tickers): Path("trained_models/ensemble2/ensemble_model.keras"),
-    CnnLstmPredictionModel(market_data.tickers): Path("trained_models/CnnLstmPredictionModel/cnn_lstm_model.keras"),
-}
+prediction_models: list[IPredictionModel] = [
+    SingleLstmPredictionModel(market_data.tickers),
+    XgboostPredictionModel(market_data.tickers),
+    EnsemblePredictionModel(market_data.tickers),
+    CnnLstmPredictionModel(market_data.tickers),
+    ProphetPredictionModel(market_data.tickers)
+]
 
 X = prices_to_returns(market_data.close_df)
 cv = WalkForward(train_size=fitting_period, test_size=holding_period)
 
 portfolio_models: list[ObjectiveFunction] = [
-    MeanRisk(risk_measure=RiskMeasure.VARIANCE),
+    # MeanRisk(risk_measure=RiskMeasure.VARIANCE),
     WorstCaseOmega(delta=0.8)
     # InverseVolatility(),
     # EqualWeighted(),
@@ -51,16 +54,16 @@ portfolio_models: list[ObjectiveFunction] = [
 
 population = Population([])
 
-print("Creating all asset portfolios")
-for pmodel in portfolio_models:
-    mpportfolio = cross_val_predict(pmodel, X, cv=cv, n_jobs=-1)
-    mpportfolio.name = f"All asstes - {pmodel.__class__.__name__}"
-    population.append(mpportfolio)
+# print("Creating all asset portfolios")
+# for pmodel in portfolio_models:
+#     mpportfolio = cross_val_predict(pmodel, X, cv=cv, n_jobs=-1)
+#     mpportfolio.name = f"All asstes - {pmodel.__class__.__name__}"
+#     population.append(mpportfolio)
 
 print("Creating prediction based portfolios")
-for pred_model, path in prediction_models.items():
+for pred_model in prediction_models:
     print(f"Creating portfolio for {pred_model.__class__.__name__}")
-    pred_model.load_model(path)
+    pred_model.load_model(models_dir)
     features = pred_model.market_to_features_data(full_market_data)
     features.crop_data(split_date, end_date)
 
@@ -107,4 +110,4 @@ fig.write_html(f"benchmark_results.html")
 # Wyświetlenie podsumowania wyników w danym okresie
 print(f"\nPodsumowanie wyników:")
 summary_df = population.summary().transpose()
-print(summary_df[['Mean', 'Variance', 'MAX Drawdown', 'Sharpe Ratio']].sort_values('Sharpe Ratio', ascending=False))
+print(summary_df[['Annualized Mean', 'Annualized Variance', 'MAX Drawdown', 'Sharpe Ratio']].sort_values('Sharpe Ratio', ascending=False))

@@ -16,9 +16,16 @@ from models.FeaturesData import FeaturesData
 from models.PredictionsData import PredictionsData
 
 class CnnLstmPredictionModel(IPredictionModel):
+    @property
+    def is_multi_model(self) -> bool:
+        return False
+    
+    @property
+    def file_extension(self) -> str:
+        return ".keras"
 
     def __init__(self, tickers: list[str]):
-        self.tickers = tickers
+        self._tickers = tickers
         self.model = None
         
         # Hiperparametry CNN
@@ -77,14 +84,8 @@ class CnnLstmPredictionModel(IPredictionModel):
         
         self.model = model
 
-    def load_model(self, model_path: Path):
-        if not isinstance(model_path, Path):
-            model_path = Path(model_path)
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file {model_path} does not exist.")
-        if not model_path.suffix == ".keras":
-            raise ValueError(f"Model file {model_path} is not a .keras file.")
-        self.model = load_model(model_path)
+    def _load_model(self, model_file: Path):
+        self.model = load_model(model_file)
     
     def market_to_features_data(self, market_data: MarketData) -> FeaturesData:
         features = FeaturesData(market_data)
@@ -98,23 +99,7 @@ class CnnLstmPredictionModel(IPredictionModel):
         features.check_for_nan()
         features.check_for_inf()
         return features
-    
-    # def _prepare_input_for_prediction(self, features_row: pd.Series) -> np.ndarray:
-      
-    #     n_features = len(self.features)
-
-    #     input_tensor = np.zeros((1, self.history_length, n_features))
-
-    #     for i in tqdm(range(self.history_length), desc="Preparing input tensor", unit="day"):
-    #         for j, feature_name in enumerate(self.features):
-    #             feature_value = features_row.loc[f'{feature_name}_{i}']
-    #             input_tensor[0, i, j] = feature_value
-        
-    #     # Upewnij się, że tensor ma odpowiedni kształt
-    #     if input_tensor.shape != (1, self.history_length, n_features):
-    #         raise ValueError(f"Input tensor has incorrect shape: {input_tensor.shape}, expected (1, {self.history_length}, {n_features})")
-    #     return input_tensor
-    
+  
     def _feature_to_tensor(self, features_df: pd.DataFrame) -> np.ndarray:
         index_len = len(features_df)
         history_length = self.history_length
@@ -135,7 +120,6 @@ class CnnLstmPredictionModel(IPredictionModel):
             print(f"Inf values found in features")
         return tensor
         
-    
     def fit(self, features: FeaturesData, val_features: FeaturesData = None):
         X_all = []
         y_all = []
@@ -346,16 +330,5 @@ class CnnLstmPredictionModel(IPredictionModel):
         
         return pd.Index(new_index)
     
-    def save_model(self, model_path: str):
-        """
-        Zapisuje model do pliku.
-        
-        Args:
-            model_path: Ścieżka do zapisu modelu
-        """
-        if not os.path.exists(model_path):
-            os.makedirs(model_path)
-            
-        model_file = os.path.join(model_path, "cnn_lstm_model.keras")
+    def _save_model(self, model_file: Path, ticker: str = None):
         self.model.save(model_file)
-        print(f"Model saved to {model_file}")

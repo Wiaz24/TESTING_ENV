@@ -3,15 +3,23 @@ from keras.api.models import Model, load_model
 from keras.api.layers import Input, Dense, LSTM, Dropout
 from keras.api.optimizers import SGD
 from keras.api.callbacks import EarlyStopping
+from tqdm import tqdm
 from .IPredictionModel import *
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
 
 class SingleLstmPredictionModel(IPredictionModel):
+    @property
+    def is_multi_model(self) -> bool:
+        return False
+    
+    @property
+    def file_extension(self) -> str:
+        return ".keras"
 
     def __init__(self, tickers: list[str]):
-        self.tickers = tickers
+        self._tickers = tickers
         self.model: Model = None
 
         self.history_length = 60
@@ -27,13 +35,7 @@ class SingleLstmPredictionModel(IPredictionModel):
 
         self._init_lstm_model()
 
-    def load_model(self, model_file: Path):
-        if not isinstance(model_file, Path):
-            model_file = Path(model_file)
-        if not model_file.exists():
-            raise FileNotFoundError(f"Model file {model_file} does not exist.")
-        if not model_file.suffix == ".keras":
-            raise ValueError(f"Model file {model_file} is not a .keras file.")
+    def _load_model(self, model_file: Path):
         self.model = load_model(model_file)
 
     def market_to_features_data(self, market_data: MarketData) -> FeaturesData:
@@ -96,16 +98,16 @@ class SingleLstmPredictionModel(IPredictionModel):
                         verbose=1, 
                         shuffle=True)
     
-    def predict(self, features: FeaturesData, verbose: str = "auto") -> PredictionsData:
+    def predict(self, features: FeaturesData, verbose: str | int = 1) -> PredictionsData:
         predictions = PredictionsData(_index = features.df_index, _tickers = features.tickers)
-        for ticker in self.tickers:
+        for ticker in tqdm(self.tickers, desc="Predicting", unit="ticker", disable=verbose == 0):
             X_ticker = features.get_features_for_ticker(ticker).values
             y_ticker = features.get_target_for_ticker(ticker).values
             # Reshape the data to 3D array
             X_ticker = np.reshape(X_ticker, (X_ticker.shape[0], X_ticker.shape[1], 1))
 
             # Make predictions
-            predictions_series = pd.Series(self.model.predict(X_ticker, verbose=verbose).flatten(), index=features.df_index)
+            predictions_series = pd.Series(self.model.predict(X_ticker, verbose=0).flatten(), index=features.df_index)
             predictions.add_prediction(ticker, predictions_series)
             # Add correct data
 
@@ -113,9 +115,5 @@ class SingleLstmPredictionModel(IPredictionModel):
             predictions.add_correct_data(ticker, correct_data_series)
         return predictions
     
-    def save_model(self, model_path: str):
-        if not os.path.exists(model_path):
-            os.makedirs(model_path)
-        model_file = f"{model_path}/single_lstm_model.keras"
+    def _save_model(self, model_file: Path):
         self.model.save(model_file)
-        print(f"Model saved to {model_file}")

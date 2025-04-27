@@ -130,7 +130,7 @@ class PredictionsData:
             raise ValueError(f"Ticker {ticker} not found in the list of tickers.")
         if len(prediction) == 0:
             raise ValueError(f"Prediction for ticker {ticker} is empty.")
-        if prediction.index is not self._dataframes[ticker].index:
+        if (self._dataframes[ticker].index != prediction.index).any():
             raise ValueError(f"Prediction index for ticker {ticker} does not match the dataframe index.")
         
         self._dataframes[ticker][self._predictions_col] = prediction
@@ -143,7 +143,7 @@ class PredictionsData:
             raise ValueError(f"Ticker {ticker} not found in the list of tickers.")
         if len(correct_data) == 0:
             raise ValueError(f"Correct data for ticker {ticker} is empty.")
-        if correct_data.index is not self._dataframes[ticker].index:
+        if (self._dataframes[ticker].index != correct_data.index).any():
             raise ValueError(f"Correct data index for ticker {ticker} does not match the dataframe index.")
         
         self._dataframes[ticker][self._correct_data_col] = correct_data

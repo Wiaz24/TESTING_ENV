@@ -2,6 +2,7 @@ from prediction_models.XgboostPredictionModel import XgboostPredictionModel
 from prediction_models.SingleLstmPredictionModel import SingleLstmPredictionModel
 from prediction_models.EnsemblePredictionModel import EnsemblePredictionModel
 from prediction_models.CnnLstmPredictionModel import CnnLstmPredictionModel
+from prediction_models.ProphetPredictionModel import ProphetPredictionModel
 from models.PreselectedTickers import PreselectedTickers
 from models.MarketData import MarketData
 
@@ -19,8 +20,9 @@ market_data = MarketData(market_data_dir)
 # model = XgboostPredictionModel(market_data.tickers)
 # model = SingleLstmPredictionModel(market_data.tickers)
 # model = EnsemblePredictionModel(market_data.tickers)
-model = CnnLstmPredictionModel(market_data.tickers)
-model.load_model(f"trained_models/{model.__class__.__name__}/cnn_lstm_model.keras")
+# model = CnnLstmPredictionModel(market_data.tickers)
+model = ProphetPredictionModel(market_data.tickers)
+model.load_model("trained_models")
 features = model.market_to_features_data(market_data)
 
 market_data.crop_data(split_date, end_date)
@@ -42,6 +44,6 @@ print("Creating portfolios")
 predictions = model.predict(features)
 preselected_data = PreselectedTickers(predictions, 7)
 best_ticker = preselected_data._selected_tickers.iloc[0][0]
-# fig = predictions.plot_predictions(ticker=best_ticker)
-fig = preselected_data.plot_selection_histogram()
+fig = predictions.plot_predictions(ticker=best_ticker)
+# fig = preselected_data.plot_selection_histogram()
 show(fig)

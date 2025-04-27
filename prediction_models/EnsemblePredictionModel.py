@@ -2,6 +2,7 @@ from keras.api.models import Model, load_model
 from keras.api.layers import Input, Dense, LSTM, Dropout, GRU, SimpleRNN, Average, Reshape
 from keras.api.optimizers import SGD
 from keras.api.callbacks import EarlyStopping
+from tqdm import tqdm
 from .IPredictionModel import *
 import pandas as pd
 import pandas_ta as ta
@@ -9,9 +10,16 @@ import numpy as np
 import os
 
 class EnsemblePredictionModel(IPredictionModel):
-
+    @property
+    def is_multi_model(self) -> bool:
+        return False
+    
+    @property
+    def file_extension(self) -> str:
+        return ".keras"
+    
     def __init__(self, tickers: list[str]):
-        self.tickers = tickers
+        self._tickers = tickers
         self.model: Model = None
 
         # Parametry modelu
@@ -27,13 +35,7 @@ class EnsemblePredictionModel(IPredictionModel):
 
         self._init_ensemble_model()
 
-    def load_model(self, model_file: Path):
-        if not isinstance(model_file, Path):
-            model_file = Path(model_file)
-        if not model_file.exists():
-            raise FileNotFoundError(f"Model file {model_file} does not exist.")
-        if not model_file.suffix == ".keras":
-            raise ValueError(f"Model file {model_file} is not a .keras file.")
+    def _load_model(self, model_file: Path):
         self.model = load_model(model_file)
 
     def market_to_features_data(self, market_data: MarketData) -> FeaturesData:
@@ -210,19 +212,12 @@ class EnsemblePredictionModel(IPredictionModel):
         
         return history
     
-    def predict(self, features: FeaturesData, verbose: str = "auto") -> PredictionsData:
-        """
-        Przewiduje przyszłe wartości cen zamknięcia dla wszystkich tickerów, 
-        a następnie konwertuje je na zwroty logarytmiczne.
-        """
-        # Tworzymy nowy indeks przesunięty o 1 próbkę w przód
+    def predict(self, features: FeaturesData, verbose: str | int = 1) -> PredictionsData:
         shifted_index = self._generate_shifted_index(features.df_index, 1)
-        
-        # Tworzenie pustego obiektu PredictionsData
         predictions = PredictionsData(_index = shifted_index, _tickers = features.tickers)
         
         # Generowanie predykcji dla każdego tickera
-        for ticker in self.tickers:
+        for ticker in tqdm(self.tickers, desc="Predicting", unit="ticker", disable=not verbose):
             if ticker not in features.tickers:
                 print(f"Ostrzeżenie: Brak danych dla tickera {ticker}")
                 continue
@@ -235,7 +230,7 @@ class EnsemblePredictionModel(IPredictionModel):
                 current_close = features.get_features_for_ticker(ticker)['current_close'].values
                 
                 # Predykcja - bez zmiany kształtu - dostajemy przewidywane ceny zamknięcia
-                predicted_close_prices = self.model.predict(X_ticker, verbose=verbose).flatten()
+                predicted_close_prices = self.model.predict(X_ticker, verbose=0).flatten()
                 
                 # Konwersja przewidywanych cen zamknięcia na zwroty logarytmiczne
                 # Wzór: log(predicted_close / current_close)
@@ -266,13 +261,5 @@ class EnsemblePredictionModel(IPredictionModel):
         
         return predictions
     
-    def save_model(self, model_path: str):
-        """
-        Zapisuje wytrenowany model do pliku.
-        """
-        if not os.path.exists(model_path):
-            os.makedirs(model_path)
-        
-        model_file = f"{model_path}/ensemble_model.keras"
+    def _save_model(self, model_file: Path):
         self.model.save(model_file)
-        print(f"Model saved to {model_file}")

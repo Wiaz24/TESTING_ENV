@@ -21,9 +21,16 @@ class Firefly:
         self.brightness = 1.0 / (fitness_value + 1e-10)  # Unikamy dzielenia przez zero
 
 class XgboostPredictionModel(IPredictionModel):
+    @property
+    def is_multi_model(self) -> bool:
+        return True
+    
+    @property
+    def file_extension(self) -> str:
+        return ".json"
 
     def __init__(self, tickers: list[str]):
-        self.tickers = tickers
+        self._tickers = tickers
         self.models: dict[str, XGBRegressor] = {}
         self.eval_metric = 'rmse'
         self.global_best_params = None
@@ -44,17 +51,12 @@ class XgboostPredictionModel(IPredictionModel):
             self.models[ticker] = XGBRegressor(objective='reg:squarederror',
                                                 eval_metric=self.eval_metric,)
 
-    def load_model(self, model_path: Path):
-        if not isinstance(model_path, Path):
-            model_path = Path(model_path)
-        for model_file in list(model_path.glob("*.json")):
-            ticker = model_file.stem
-            if ticker in self.models:
-                self.models[ticker] = XGBRegressor()
-                self.models[ticker].load_model(model_file)
-            else:
-                raise ValueError(f"Model for ticker {ticker} not found in the loaded models.")   
-    
+    def _load_model(self, model_file: Path, ticker: str = None):
+        if ticker is None:
+            raise ValueError("Ticker must be provided for loading the model.")
+        self.models[ticker] = XGBRegressor()
+        self.models[ticker].load_model(model_file)    
+
     def market_to_features_data(self, market_data: MarketData) -> FeaturesData:
         features = FeaturesData(market_data)
         
@@ -473,7 +475,7 @@ class XgboostPredictionModel(IPredictionModel):
         self.global_best_params = best_params
         return best_params
 
-    def fit(self, features: FeaturesData, use_ifa=False):
+    def fit(self, features: FeaturesData, use_ifa=True):
         if use_ifa:
             self._perform_ifa_optimization(features)
         else:
@@ -533,11 +535,7 @@ class XgboostPredictionModel(IPredictionModel):
 
         return predictions
     
-    def save_model(self, model_path: str):
-        if not os.path.exists(model_path):
-            os.makedirs(model_path)
-            
-        for ticker in self.tickers:
-            model_file = Path(model_path) / f"{ticker}.json"
-            self.models[ticker].save_model(model_file)
-            print(f"Model for {ticker} saved to {model_file}")
+    def _save_model(self, model_file: Path, ticker: str = None):
+        if ticker is None:
+            raise ValueError("Ticker must be provided for saving the model.")
+        self.models[ticker].save_model(model_file)

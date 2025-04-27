@@ -1,7 +1,6 @@
 **/*.csv
 **/*.json
-**/*.keras
-**/*.h5
+trained_models/
 **/*.png
 **/*.html
 __pycache__/
